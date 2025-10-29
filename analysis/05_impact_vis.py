@@ -161,29 +161,32 @@ if __name__ == "__main__":
             book.add_order(order = order)                                                                                   # Add order to the book
         previous_price = price                                                                                              # Update previous price (for spillage calc)
 
+
+    last_trade_price = price_series[0]
+    
     # Gather stats for analysis & data plots
     for o in book.filled_orders:
-        # Figure out intended price (if limit order, it's the limit price, else last traded price)
-        intended_price = o.price if o.order_type == 'limit' else previous_price
-        slippage = None     # Initialise slippage
-
-        # Calculate slippage if fill price and intended price are available
+        intended_price = o.price if o.order_type == 'limit' else last_trade_price
+        slippage = None
         if o.fill_price is not None and intended_price is not None:
             slippage = o.fill_price - intended_price
 
-        # Store data for analysis
-        order_sizes.append(o.quantity)                                                         # Store order size (quantity)
-        order_types.append(o.order_type)                                                       # Store order type
-        execution_prices.append(o.fill_price if o.fill_price is not None else np.nan)          # Store execution price (if fill price is None, use NaN)
-        intended_prices.append(intended_price)                                                # Store intended price
-        slippages.append(slippage)                                                             # Store slippage
-        fill_times.append(o.fill_time)                                                         # Store fill time (currently None can be updated later)
+        order_sizes.append(o.quantity)
+        order_types.append(o.order_type)
+        execution_prices.append(o.fill_price if o.fill_price is not None else np.nan)
+        intended_prices.append(intended_price)
+        slippages.append(slippage)
+        fill_times.append(o.fill_time)
 
-        # Count market orders filled at previous price
+        # Count market orders filled at last_trade_price
         if o.order_type == 'market':
             market_total += 1
-            if o.fill_price == previous_price:
+            if o.fill_price == last_trade_price:
                 market_filled_first += 1
+
+        # Always update last_trade_price after every fill (simulate ticker tape in real market)
+        if o.fill_price is not None:
+            last_trade_price = o.fill_price
             
     # Summary statistics
     filled_count = len(book.filled_orders)                                                      # Total filled orders
