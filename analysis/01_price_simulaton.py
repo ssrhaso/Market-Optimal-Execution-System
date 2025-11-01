@@ -1,3 +1,5 @@
+#Simulates stock price movements using Geometric Brownian Motion (GBM) model 
+
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -15,7 +17,7 @@ initial_price = 152         # Initial stock price
 def simulate_gbm():
     x = np.linspace(0, time_horizon, time_horizon) # Time vector from 0 to 252 days
     y = np.zeros(time_horizon)                     # Price vector initialised to zeros
-    y[0] = initial_price                           # Set initial price
+    y[0] = initial_price                           # Set initial price2
 
 
     # For each time step (from day 1 to day 251), calculate the price using Geometric Brownian Motion

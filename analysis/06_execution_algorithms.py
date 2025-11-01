@@ -55,22 +55,25 @@ def simulate_gbm(time_horizon=252, delta_t=1, mu=0.05/252, sigma=0.01, initial_p
 # Order class to represent a stock order
 class Order:
     #Initialise order with side, quantity, type, and optional price
-    def __init__(self, side, quantity, order_type, price=None):
+    def __init__(self, side, quantity, order_type, price=None, source="naive"):
         self.side = side                    # 'buy' or 'sell'
         self.quantity = quantity            # number of shares
         self.order_type = order_type        # 'market' or 'limit'
         self.price = price                  # limit price for limit orders
-        
         self.status = 'open'               # order status: 'open', 'filled', 'partially filled', 'cancelled'
         self.fill_price = None             # price at which order was filled
         self.fill_time = None              # time at which order was filled
-
+        
+        self.source = source                # source of the order (for future use)
+        
     # String representation of the Order
     def __str__(self):
         if self.order_type == 'market':
             return f"{self.side.capitalize()} {self.quantity} shares @ market price, status: {self.status}"
         else:
             return f"{self.side.capitalize()} {self.quantity} shares @ limit {self.price}, status: {self.status}"
+
+
 
 # OrderBook class to manage all orders
 class OrderBook:
@@ -145,25 +148,39 @@ if __name__ == "__main__":
     book = OrderBook()                          # Initialise an empty order book
     np.random.seed(42)                          # For reproducibility of random numbers
     previous_price = None                       # To track last traded price
+
+
+    parent_order_qty = 1000                                                             # Parent order quantity (can be adjusted for realism)
+    num_slices = 8                                                                      # Number of slices to break parent order into (can be adjusted for realism)
+    slice_qty = parent_order_qty // num_slices                                          # Quantity per slice
+    twap_intervals = np.linspace(0, len(price_series)-1, num_slices, dtype=int)        # TWAP intervals for order slicing
+    twap_orders_submitted = []                                                          # To track submitted TWAP orders                    
+    
     
     
     # Simulate adding and matching orders
     for t, price in enumerate(price_series):
         
-        if t % 12 == 0:                         #If timestep is a multiple of 12 (simulate adding a new order every 12 timesteps)
+        #  Naive/random strategy
+        if t % 12 == 0:
+            side = np.random.choice(['buy','sell'])
+            order_type = np.random.choice(['market','limit'], p=[0.3,0.7])
+            quantity = np.random.randint(50,501)
+            lim_price = price + np.random.uniform(-0.5,0.5) if order_type == 'limit' else None
+            order = Order(side=side, quantity=quantity, order_type=order_type, price=lim_price, source="naive")
+            book.add_order(order)
+
+        #  TWAP strategy 
+        if t in twap_intervals:
+            twap_order = Order(side='buy', quantity=slice_qty, order_type='market', price=None, source="twap")
+            book.add_order(twap_order)
+            twap_orders_submitted.append(t)
+            last_trade_price = price_series[0]
             
-            side = np.random.choice(['buy','sell'])                                         # Randomly choose buy or sell (can be adjusted for realism)
-            order_type = np.random.choice(['market','limit'], p=[0.3,0.7])                  # 30% market, 70% limit orders (can be adjusted for realism)
-            quantity = np.random.randint(50,501)                                              # Random quantity between 50 and 500 shares (can be adjusted for realism)
-            lim_price = price + np.random.uniform(-0.5,0.5) if order_type == 'limit' else None  # Limit price near current price (+/- up to $0) (can be adjusted for realism)
-
-            order = Order(side = side, quantity = quantity, order_type = order_type, price = lim_price)                     # Create the order
-            book.add_order(order = order)                                                                                   # Add order to the book
-        previous_price = price                                                                                              # Update previous price (for spillage calc)
-
-
-    last_trade_price = price_series[0]
-    
+            
+            
+            
+            
     # Gather stats for analysis & data plots
     for o in book.filled_orders:
         intended_price = o.price if o.order_type == 'limit' else last_trade_price
@@ -187,19 +204,42 @@ if __name__ == "__main__":
         # Always update last_trade_price after every fill (simulate ticker tape in real market)
         if o.fill_price is not None:
             last_trade_price = o.fill_price
-            
-    # Summary statistics
-    filled_count = len(book.filled_orders)                                                      # Total filled orders
-    total_orders = filled_count + len(book.bids) + len(book.asks)                               # Total orders placed                  
-    avg_slippage = np.nanmean([s for s in slippages if s is not None])                          # Average slippage, ignoring None values
-    fill_rate = (100 * filled_count / total_orders) if total_orders else 0                      # % of orders filled    
-    market_fill_percent = (100 * market_filled_first / market_total) if market_total else 0     # % of Market orders filled at 'first available' price
 
-    # Summary statistics output
-    print(f"\nFilled orders: {filled_count} / {total_orders}")
-    print(f"Average slippage: {avg_slippage:.4f}")
-    print(f"Fill rate: {fill_rate:.2f}%")
-    print(f"% Market orders filled at first price: {market_fill_percent:.2f}%")
+    if o.fill_price is not None:
+        last_trade_price = o.fill_price
+
+    # Naive vs TWAP Metrics
+
+
+    # Separate filled orders by source tag
+    twap_filled = [o for o in book.filled_orders if o.source == 'twap']
+    naive_filled = [o for o in book.filled_orders if o.source == 'naive']
+
+    # TWAP metrics
+    twap_slippages = [
+        o.fill_price - price_series[twap_orders_submitted[i]]
+        for i, o in enumerate(twap_filled) if o.fill_price is not None
+    ]
+    twap_fill_rate = len(twap_filled) / parent_order_qty if parent_order_qty else 0
+
+    # Naive metrics
+    naive_slippages = [
+        o.fill_price - (o.price if o.order_type == 'limit' else last_trade_price)
+        for o in naive_filled if o.fill_price is not None
+    ]
+    naive_fill_quantity = sum([o.quantity for o in naive_filled])
+    naive_fill_rate = naive_fill_quantity / sum([o.quantity for o in naive_filled]) if naive_filled else 0
+
+    print("\n--- TWAP Strategy ---")
+    print(f"Filled Orders: {len(twap_filled)} / {parent_order_qty}")
+    print(f"Average Slippage: {np.mean(twap_slippages) if twap_slippages else None:.4f}")
+    print(f"Fill Rate: {twap_fill_rate*100:.2f}%")
+
+    print("\n--- Naive Strategy ---")
+    print(f"Filled Orders: {naive_fill_quantity}")
+    print(f"Average Slippage: {np.mean(naive_slippages) if naive_slippages else None:.4f}")
+    print(f"Fill Rate: {naive_fill_rate*100:.2f}%")
+
 
     # PLOTTING using seaborn functions defined above
     plot_slippage_histogram(slippages)
