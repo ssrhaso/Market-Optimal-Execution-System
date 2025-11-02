@@ -12,15 +12,15 @@ class VWAPstrategy:
         self.num_slices = num_slices
     
     # Run the VWAP strategy
-    def run(self, orderbook, price_series, parent_qty):
+    def run(self, orderbook, price_series):
         np.random.seed(42)
         vol_profile = np.abs(np.random.normal(1, 0.5, len(price_series)))
         vol_profile /= vol_profile.sum()
-        shares_remaining = parent_qty
+        shares_remaining = self.parent_qty
         fill_records = []
         
         for i, v in enumerate(vol_profile):
-            qty = int(round(v*parent_qty))
+            qty = int(round(v*self.parent_qty))
             qty = min(qty, shares_remaining)
             
             if qty > 0:
