@@ -1,3 +1,6 @@
+import heapq                # Fast priority queue operations, maintain best bids/asks in o(log n) time complexity
+import time
+
 # Order class to represent a stock order
 class Order:
     #Initialise order with side, quantity, type, and optional price
@@ -20,10 +23,12 @@ class Order:
             return f"{self.side.capitalize()} {self.quantity} shares @ limit {self.price}, status: {self.status}"
 
 # OrderBook class to manage all orders
+# Implemented using heaps for efficient order matching
 class OrderBook:
     def __init__(self, price_series):
-        self.bids = []                      # List to hold buy orders
-        self.asks = []                      # List to hold sell orders
+        self.bids = []                      # Max Heap (store as -price, timestamp, order) for buy orders
+        self.asks = []                      # Min Heap (store as price, timestamp, order) for sell orders
+        
         self.filled_orders = []             # List to hold filled orders
         self.price_series = price_series    # Track simulation prices
         self.current_time = 0               # Current time step in simulation
@@ -32,21 +37,27 @@ class OrderBook:
         self.current_time = time_index
         
     def add_order(self,order):
+        
+        ts = time.time()
         if order.side == 'buy':
-            self.bids.append(order)
-            self.bids.sort (key=lambda x: (-x.price if x.price else float('-inf')))  # Highest price first
+            # Invert price for max-heap behavior, if price is None (market order), use -inf to ensure it has least priority for limit matching, include timestamp
+            heapq.heappush(self.bids, (-order.price if order.price is not None else float ('-inf'), ts, order))
         
         else:
-            self.asks.append(order)
-            self.asks.sort (key=lambda x: (x.price if x.price else float ('inf')))   # Lowest price first
+            # Regular price for min-heap behavior, if price is None (market order), use inf to ensure it has lowest priority for limit matching, include timestamp
+            heapq.heappush(self.asks, (order.price if order.price is not None else float ('inf'), ts, order))
         self.match_orders()
         
         
     def match_orders(self):
         # Market Orders or Crossing Limits get filled simultaneously
-        while self.bids and self.asks:                      # Check if both sides have orders
-            buy = self.bids[0]                              # Highest bid
-            sell = self.asks[0]                             # Lowest ask
+        while self.bids and self.asks:                                         # Check if both sides have orders
+            bid_price, bid_ts, buy = self.bids[0]                              # Highest bid
+            ask_price, ask_ts, sell = self.asks[0]                             # Lowest ask
+            
+            price_bid = -bid_price if bid_price != float('-inf') else None  # Convert back to positive price
+            price_ask = ask_price if ask_price != float('inf') else None    # Convert back to positive price
+
             fill_price = None
             
             #PRICING LOGIC
@@ -57,14 +68,21 @@ class OrderBook:
             
             # CROSSING LIMITS:
             elif (buy.price is not None and sell.price is not None and buy.price >= sell.price):
-                fill_price = buy.price  # Fill at buy limit price
+                fill_price = price_ask  # Fill at buy limit price
             
             else:
                 break  # No match possible
             
             buy.status = sell.status = 'filled'
             buy.fill_price = sell.fill_price = fill_price
-            buy.fill_time = sell.fill_time = self.current_time                      
+            buy.fill_time = sell.fill_time = self.current_time          
+                        
             self.filled_orders.extend([buy, sell])
-            self.bids.pop(0)
-            self.asks.pop(0)
+            heapq.heappop(self.bids)
+            heapq.heappop(self.asks)
+
+
+    def get_top_of_book(self):
+        best_bid = -self.bids[0][0] if self.bids else None
+        best_ask = self.asks[0][0] if self.asks else None
+        return best_bid, best_ask
