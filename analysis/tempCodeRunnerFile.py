@@ -32,27 +32,25 @@ urgency_param = urgency / 100  # Normalise to 0-1 range for calculations
 if __name__ == "__main__":
     # Generate market and parameters
     _, price_series = simulate_gbm(initial_price=200)
-    arrivals = generate_order_arrivals(time_steps=len(price_series), avg_orders_per_step=7)
+    arrivals = generate_order_arrivals(time_steps=len(price_series), avg_orders_per_step=3)
     parent_qty = 1000
     num_slices = 8
     spreads = []
-    book_sim = OrderBook(price_series=price_series)
-
     
     
     
     # Integrate random market orders into order book
     for t in range(len(price_series)):
-        book_sim.set_time(t)
+        OrderBook.set_time(t)
         
         # ADD RANDOM MARKET ORDERS
         num_orders = arrivals[t]
         for _ in range(num_orders):
             random_order = generate_random_order(current_price=price_series[t])
-            book_sim.add_order(random_order)
-
+            OrderBook.add_order(random_order)
+        
         # TRACK BID-ASK SPREAD
-        best_bid, best_ask = book_sim.get_top_of_book()
+        best_bid, best_ask = OrderBook.get_top_of_book()
         if (best_bid is not None) and (best_ask is not None):
             spread = best_ask - best_bid
             spreads.append(spread)

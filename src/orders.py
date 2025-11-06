@@ -3,6 +3,8 @@ import time
 
 # Order class to represent a stock order
 class Order:
+    next_id = 1                             # Class variable to assign unique IDs to orders
+    
     #Initialise order with side, quantity, type, and optional price
     def __init__(self, side, quantity, order_type, price=None, source="naive"):
         self.side = side                    # 'buy' or 'sell'
@@ -12,6 +14,8 @@ class Order:
         self.status = 'open'               # order status: 'open', 'filled', 'partially filled', 'cancelled'
         self.fill_price = None             # price at which order was filled
         self.fill_time = None              # time at which order was filled
+        self.order_id = Order.next_id
+        Order.next_id += 1
         
         self.source = source                # source of the order (for future use)
         
@@ -41,20 +45,20 @@ class OrderBook:
         ts = time.time()
         if order.side == 'buy':
             # Invert price for max-heap behavior, if price is None (market order), use -inf to ensure it has least priority for limit matching, include timestamp
-            heapq.heappush(self.bids, (-order.price if order.price is not None else float ('-inf'), ts, order))
+            heapq.heappush(self.bids, (-order.price if order.price is not None else float ('-inf'), ts,order.order_id, order))
         
         else:
             # Regular price for min-heap behavior, if price is None (market order), use inf to ensure it has lowest priority for limit matching, include timestamp
-            heapq.heappush(self.asks, (order.price if order.price is not None else float ('inf'), ts, order))
+            heapq.heappush(self.asks, (order.price if order.price is not None else float ('inf'), ts, order.order_id, order))
         self.match_orders()
         
         
     def match_orders(self):
         # Market Orders or Crossing Limits get filled simultaneously
         while self.bids and self.asks:                                         # Check if both sides have orders
-            bid_price, bid_ts, buy = self.bids[0]                              # Highest bid
-            ask_price, ask_ts, sell = self.asks[0]                             # Lowest ask
-            
+            bid_price, bid_ts, bid_id, buy = self.bids[0]                              # Highest bid
+            ask_price, ask_ts, ask_id, sell = self.asks[0]                             # Lowest ask
+
             price_bid = -bid_price if bid_price != float('-inf') else None  # Convert back to positive price
             price_ask = ask_price if ask_price != float('inf') else None    # Convert back to positive price
 
