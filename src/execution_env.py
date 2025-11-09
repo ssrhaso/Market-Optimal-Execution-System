@@ -1,5 +1,5 @@
-import gym
-from gym import spaces          # Define structure and bounds for action and observation spaces
+import gymnasium as gym         # OpenAI Gym for RL environment structure
+from gymnasium import spaces          # Define structure and bounds for action and observation spaces
 import numpy as np
 
 from orders import Order
@@ -25,21 +25,20 @@ class OptimalExecutionEnv(gym.Env):
     
     
     # Reset Simulator State
-    def reset(self):
+    def reset(self, seed=None, options=None):
         """Resets Enviroment for new episode
         Returns:
             state (np.array): initial state observation
         """
-        
-        # 1. INITIALISE ORDER BOOK
+        # ERROR HANDLING FOR SEED
+        if seed is not None:
+            np.random.seed(seed)
+            
+        # 1. INITIALISE PRICE SERIES AND ORDER BOOK
         _ , self.price_series = simulate_gbm(initial_price=100.0, time_horizon=self.time_horizon, delta_t=1, mu=0.05/252, sigma=0.2)
-        
         self.order_book = OrderBook(price_series=self.price_series)
         
-        # 2. GENERATE PRICE SERIES (GBM)
-        _, self.price_series = simulate_gbm(initial_price=100.0, time_horizon=self.time_horizon, delta_t=1, mu=0.05/252, sigma=0.2)
-        
-        # 3. INITIALISE TRACKING VARIABLES 
+        # 2. INITIALISE TRACKING VARIABLES 
         self.current_step = 0                                   # Current time step in episode  
         self.inventory = self.parent_order_size                 # Remaining shares to execute    
         self.cash_spent = 0.0                                   # Total cash spent on executions
@@ -47,18 +46,20 @@ class OptimalExecutionEnv(gym.Env):
         self.execution_prices = []                              # Prices at which shares were executed
         self.agent_fill_history = []                            # History of agent fills
 
-        # 4. COMPUTE INITIAL VOLATILITY
+        # 3. COMPUTE INITIAL VOLATILITY
         self.volatility_series = get_current_volatility(self.price_series, window=10)
         self.current_volatility = self.volatility_series.iloc[0] if len(self.volatility_series) > 0 else 0.01
         
-        # 5. INITIALISE ORDER BOOK WITH LIQUIDITY
+        # 4. INITIALISE ORDER BOOK WITH LIQUIDITY
         self._seed_order_book()
         
-        # 6. SET ORDER BOOK TIME
+        # 5. SET ORDER BOOK TIME
         self.order_book.set_time(0)
        
-        # 7. RETURN INITIAL STATE
-        return self._get_state()
+        # 6. RETURN INITIAL STATE
+        observation = self._get_state()
+        info = {}
+        return observation, info
 
 
     # Seed Order Book with Initial Liquidity
@@ -87,8 +88,12 @@ class OptimalExecutionEnv(gym.Env):
             state (np.array): current state observation vector  
         """
         
+        # BOUNDS CHECK (CLAMP STEP TO VALID RANGE)
+        valid_step = min(self.current_step, len(self.price_series) - 1)
+        
+        
         # GET MARKET FEATURES
-        current_price = self.price_series[self.current_step]
+        current_price = self.price_series[valid_step]
         best_bid, best_ask = self.order_book.get_top_of_book()
         
         # CASE HANDLING
@@ -200,7 +205,9 @@ class OptimalExecutionEnv(gym.Env):
         reward = self._calculate_reward()
         
         #6. CHECK DONE
-        done = (self.current_step >= self.time_horizon) or (self.inventory <= 0)
+        terminated = (self.current_step >= self.time_horizon) or (self.inventory <= 0)          # Time limit reached or all shares executed
+        truncated = False
+    
         
         #7. GET NEXT STATE
         next_state = self._get_state()
@@ -214,7 +221,7 @@ class OptimalExecutionEnv(gym.Env):
         }
         
         
-        return next_state, reward, done, info
+        return next_state, reward, terminated, truncated, info
     
     # HELPER FUNCTIONS FOR STEP METHOD
     # Simulate Market Orders and Update Order Book
@@ -270,9 +277,12 @@ class OptimalExecutionEnv(gym.Env):
         # No execution yet, small negative reward to encourage action
         if self.shares_executed == 0:
             return -0.01
+        
+        # BOUNDS CHECK (CLAMP STEP TO VALID RANGE)
+        valid_step = min(self.current_step, len(self.price_series) - 1)
 
         # VWAP Benchmark
-        vwap_benchmark = np.mean(self.price_series[:self.current_step+1])
+        vwap_benchmark = np.mean(self.price_series[:valid_step+1])
         
         # AGENT AVERAGE EXECUTION PRICE
         avg_exec_price = self.cash_spent / self.shares_executed
