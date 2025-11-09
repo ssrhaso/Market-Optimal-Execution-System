@@ -2,6 +2,7 @@ import gym
 from gym import spaces          # Define structure and bounds for action and observation spaces
 import numpy as np
 
+from orders import Order
 from orders import OrderBook
 from market_simulator import generate_random_order, generate_order_arrivals
 from volatility import get_current_volatility
@@ -18,7 +19,7 @@ class OptimalExecutionEnv(gym.Env):
         self.time_horizon = time_horizon
         self.n_levels = n_levels
         
-        self.observation_space = spaces.Box(low = np.inf, high = np.inf, shape = (self.n_levels * 2 + 3,), dtype = np.float32) 
+        self.observation_space = spaces.Box(low = -np.inf, high = np.inf, shape = (8,), dtype = np.float32) 
         self.action_space = spaces.Discrete(3)  # Example: 3 discrete actions (e.g., nothing, buy, sell)
         
     
@@ -76,17 +77,194 @@ class OptimalExecutionEnv(gym.Env):
                 self.order_book.add_order(order)
 
 
+    # Return State Vector (best bid/ask, inventory, time left, volatility, etc.)
+    def _get_state(self):
+        """Extract and format current state as feature vector for RL agent 
+        
+        Returns:
+            state (np.array): current state observation vector  
+        """
+        
+        # GET MARKET FEATURES
+        current_price = self.price_series[self.current_step]
+        best_bid, best_ask = self.order_book.get_top_of_book()
+        
+        # CASE HANDLING
+        if best_bid is None:
+            best_bid = current_price * 0.99 # Default 1% below current price
+        if best_ask is None:
+            best_ask = current_price * 1.01 # Default 1% above current price
+        
+        # SPREAD
+        spread = best_ask - best_bid
+        # NORMALISED DETAILS 
+        time_progress = self.current_step / self.time_horizon
+        inventory_remaining = self.inventory / self.parent_order_size
+        
+        # VOLATILITY
+        if self.current_step <len(self.volatility_series):
+            current_vol = self.volatility_series.iloc[self.current_step]
+            if np.isnan(current_vol):
+                current_vol = 0.01 # Default 1%
+        
+        else:
+            current_vol = 0.01 # Default 1%
+            
+            
+        # EXECUTION PROGRESS (% of shares executed)
+        execution_progress = self.shares_executed / self.parent_order_size
+        # AVG EXECUTION PRICE
+        if self.shares_executed > 0:
+            avg_exec_price = self.cash_spent / self.shares_executed
+        else:
+            avg_exec_price = current_price 
+        
+        
+        # BUILD STATE VECTOR
+        state = np.array([
+            best_bid / current_price,               # Normalised best bid
+            best_ask / current_price,               # Normalised best ask  
+            spread / current_price,                 # Normalised spread
+            time_progress,                          # Normalised time progress [0,1] (0=start, 1=end)
+            inventory_remaining,                    # Normalised inventory remaining
+            current_vol,                            # Normalised current volatility
+            execution_progress,                     # Normalised execution progress [0,1]
+            avg_exec_price / current_price          # Normalised average execution price
+        ], dtype=np.float32)
+        
+        
+        
+        return state
+    
+    
     
     
     
     # Apply RL Agent Action to Simulation
     def step(self, action):
-        pass
+        """Execute 1 Timestep of Enviroment
+        
+        Action Space:
+        0. Do nothing (wait)
+        1. Execute 10% of remaining inventory as market order
+        2. Execute 5% of remaining inventory as market order
 
-    # Return State Vector (best bid/ask, inventory, time left, volatility, etc.)
-    def _get_state(self):
-        pass
+        Args:
+            action (int): Action chosen by the agent
+            
+        Returns:
+            observation (np.array): next state observation
+            reward (float): reward obtained from action
+            done (bool): whether episode has ended
+            info (dict): additional information
+        """
+        
+        #1. PARSE ACTION, SUBMIT AGENTS ORDER
+        if action == 1 and self.inventory > 0:
+            # Execute 10% of remaining inventory
+            order_size = max(1, int(self.inventory * 0.10))
+            order_size = min(order_size, self.inventory)            # Ensure we don't exceed inventory   
+            
+            agent_order = Order(side='buy', order_type='market', quantity=order_size, source='r1_agent')     
+            self.order_book.add_order(agent_order)
+        
+        #2 SIMULATE MARKET ACTIVITY FOR CURRENT TIME STEP
+        self._simulate_market_orders()
+        
+        #3. UPDATE AGENT INVENTORY AND CASH BASED ON FILLS
+        self._update_agent_state()
+        
+        #4. ADVANCE TIME STEP
+        self.current_step += 1
+        self.order_book.set_time(self.current_step)
+        
+        #5. COMPUTE REWARD
+        reward = self._calculate_reward()
+        
+        #6. CHECK DONE
+        done = (self.current_step >= self.time_horizon) or (self.inventory <= 0)
+        
+        #7. GET NEXT STATE
+        next_state = self._get_state()
+        
+        #8 INFO DICTIONARY
+        info = {
+            'inventory': self.inventory,
+            'cash_spent': self.cash_spent,
+            'shares_executed': self.shares_executed,    
+            'current_step': self.current_step
+        }
+        
+        
+        return next_state, reward, done, info
+    
+    # HELPER FUNCTIONS FOR STEP METHOD
+    # Simulate Market Orders and Update Order Book
+    def _simulate_market_orders(self):
+        """Simulate Random Market participants submitting orders, provide liquidity / realistic dynamics for environment
+        """
+        
+        current_price = self.price_series[self.current_step]
+        num_orders = np.random.randint(2,6)  # Random number of market orders this step (2 to 5)
+        for _ in range(num_orders):
+            order = generate_random_order(current_price=current_price)
+            self.order_book.add_order(order)
+            
+    def _update_agent_state(self):
+        """Update agent's inventory and cash based on executed orders in the order book
+        """
+        for order in self.order_book.filled_orders:
+            if order.source == 'r1_agent' and order.status == 'filled':
+                fill_qty = order.quantity
+                fill_price = order.fill_price
+                
+                # UPDATE TRACKING
+                self.inventory -= fill_qty
+                self.cash_spent += fill_qty * fill_price
+                self.shares_executed += fill_qty
+                self.execution_prices.append(fill_price)
+                
+                # RECORD FILL
+                self.agent_fill_history.append({
+                    'step': self.current_step,
+                    'quantity': fill_qty,
+                    'price': fill_price
+                })
+
 
     # Calculate Reward (e.g., negative execution cost, slippage, etc.)
     def _calculate_reward(self):
-        pass
+        """Calculate reward based on execution performance
+        
+        Initial reward: Negative slippage from benchmark (VWAP)
+        
+        Returns:
+            reward (float): calculated reward for current step
+        """
+        
+        # No execution yet, small negative reward to encourage action
+        if self.shares_executed == 0:
+            return -0.01
+
+        # VWAP Benchmark
+        vwap_benchmark = np.mean(self.price_series[:self.current_step+1])
+        
+        # AGENT AVERAGE EXECUTION PRICE
+        avg_exec_price = self.cash_spent / self.shares_executed
+        
+        # SLIPPAGE NORMALISED (DIFFERENCE FROM VWAP)
+        slippage = (avg_exec_price - vwap_benchmark) / vwap_benchmark
+        
+        # REWARD = NEGATIVE SLIPPAGE (SCALE FOR BETTER LEARNING)
+        reward = -slippage * 100        
+        
+        # BONUS REWARD FOR COMPLETING ORDER
+        if self.inventory == 0:
+            reward += 1.0  
+        
+        # PENALTY FOR NOT COMPLETING ORDER BY END
+        if self.current_step == self.time_horizon - 1 and self.inventory > 0:
+            penalty = (self.inventory / self.parent_order_size) * 10.0 
+            reward -= penalty
+        
+        return reward
