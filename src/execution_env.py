@@ -32,7 +32,9 @@ class OptimalExecutionEnv(gym.Env):
         """
         
         # 1. INITIALISE ORDER BOOK
-        self.order_book = OrderBook()
+        _ , self.price_series = simulate_gbm(initial_price=100.0, time_horizon=self.time_horizon, delta_t=1, mu=0.05/252, sigma=0.2)
+        
+        self.order_book = OrderBook(price_series=self.price_series)
         
         # 2. GENERATE PRICE SERIES (GBM)
         _, self.price_series = simulate_gbm(initial_price=100.0, time_horizon=self.time_horizon, delta_t=1, mu=0.05/252, sigma=0.2)
@@ -90,10 +92,12 @@ class OptimalExecutionEnv(gym.Env):
         best_bid, best_ask = self.order_book.get_top_of_book()
         
         # CASE HANDLING
-        if best_bid is None:
+        if best_bid is None or best_bid <= 0:
             best_bid = current_price * 0.99 # Default 1% below current price
-        if best_ask is None:
+        if best_ask is None or best_ask <= 0:
             best_ask = current_price * 1.01 # Default 1% above current price
+        if best_bid >= best_ask:
+            best_ask = best_bid * 1.01      # Ensure ask > bid
         
         # SPREAD
         spread = best_ask - best_bid
@@ -119,6 +123,9 @@ class OptimalExecutionEnv(gym.Env):
         else:
             avg_exec_price = current_price 
         
+        # PREVENT DIVISON BY 0
+        if current_price <= 0:
+            current_price = 100.0 # Fallback 
         
         # BUILD STATE VECTOR
         state = np.array([
@@ -132,6 +139,8 @@ class OptimalExecutionEnv(gym.Env):
             avg_exec_price / current_price          # Normalised average execution price
         ], dtype=np.float32)
         
+        # FINAL SAFETY CHECK
+        state = np.nan_to_num(state, nan=0.0, posinf=1.0, neginf=0.0)
         
         
         return state
@@ -165,8 +174,17 @@ class OptimalExecutionEnv(gym.Env):
             order_size = max(1, int(self.inventory * 0.10))
             order_size = min(order_size, self.inventory)            # Ensure we don't exceed inventory   
             
-            agent_order = Order(side='buy', order_type='market', quantity=order_size, source='r1_agent')     
+            agent_order = Order(side='buy', order_type='market', quantity=order_size, source='rl_agent')     
             self.order_book.add_order(agent_order)
+        
+        elif action == 2 and self.inventory > 0:
+            # Execute 5% of remaining inventory
+            order_size = max(1, int(self.inventory * 0.05))
+            order_size = min(order_size, self.inventory)            # Ensure we don't exceed inventory
+            
+            agent_order = Order(side='buy', order_type='market', quantity=order_size, source='rl_agent')
+            self.order_book.add_order(agent_order)
+            
         
         #2 SIMULATE MARKET ACTIVITY FOR CURRENT TIME STEP
         self._simulate_market_orders()
@@ -214,9 +232,12 @@ class OptimalExecutionEnv(gym.Env):
         """Update agent's inventory and cash based on executed orders in the order book
         """
         for order in self.order_book.filled_orders:
-            if order.source == 'r1_agent' and order.status == 'filled':
+            if order.source == 'rl_agent' and order.status == 'filled':
                 fill_qty = order.quantity
                 fill_price = order.fill_price
+                
+                # CLAMP FILL QTY TO REMAINING INVENTORY
+                fill_qty = min(fill_qty, self.inventory)
                 
                 # UPDATE TRACKING
                 self.inventory -= fill_qty
@@ -230,6 +251,10 @@ class OptimalExecutionEnv(gym.Env):
                     'quantity': fill_qty,
                     'price': fill_price
                 })
+                
+                # SAFETY
+                if self.inventory < 0:
+                    self.inventory = 0
 
 
     # Calculate Reward (e.g., negative execution cost, slippage, etc.)
