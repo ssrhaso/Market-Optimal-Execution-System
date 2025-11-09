@@ -83,7 +83,7 @@ def train_dqn_agent():
     model = DQN(
         policy="MlpPolicy",                 # Multi-layer perceptron policy (feedforward NN)
         env=env,                            # Environment
-        learning_rate=1e-4,                 # Learning rate (how fast the agent learns)
+        learning_rate=5e-5,                 # Learning rate (how fast the agent learns)
         buffer_size=10000,                  # How many past experiences to store for learning
         learning_starts=1000,               # Number of steps before learning starts (to gather initial experience)
         batch_size=32,                      # Number of experiences to sample for each learning update (32 experiences at a time)
@@ -111,7 +111,7 @@ def train_dqn_agent():
     # CALLBACK
     callback = TrainingCallback()               #  Create custom callback to log training progress
     # TIMESTEPS TO TRAIN
-    total_timesteps = 50000                     # Total training timesteps (can be adjusted)
+    total_timesteps = 100000                     # Total training timesteps (can be adjusted)
     
     model.learn(
         total_timesteps=total_timesteps,        # Total training timesteps

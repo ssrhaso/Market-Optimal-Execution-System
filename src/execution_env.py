@@ -176,8 +176,9 @@ class OptimalExecutionEnv(gym.Env):
         #1. PARSE ACTION, SUBMIT AGENTS ORDER
         if action == 1 and self.inventory > 0:
             # Execute 10% of remaining inventory
-            order_size = max(1, int(self.inventory * 0.10))
-            order_size = min(order_size, self.inventory)            # Ensure we don't exceed inventory   
+            max_action = int(self.parent_order_size * 0.10)
+            order_size = max(1, min(max_action, int(self.inventory * 0.10), self.inventory))
+  
             
             agent_order = Order(side='buy', order_type='market', quantity=order_size, source='rl_agent')     
             self.order_book.add_order(agent_order)
@@ -193,6 +194,7 @@ class OptimalExecutionEnv(gym.Env):
         
         #2 SIMULATE MARKET ACTIVITY FOR CURRENT TIME STEP
         self._simulate_market_orders()
+        self.order_book.match_orders()
         
         #3. UPDATE AGENT INVENTORY AND CASH BASED ON FILLS
         self._update_agent_state()
