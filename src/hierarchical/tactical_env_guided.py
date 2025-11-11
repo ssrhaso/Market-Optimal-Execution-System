@@ -1,5 +1,5 @@
 """
-Tactical Execution Enviroment with Strategic Pace Guidance
+GYM2 - Tactical Execution Enviroment with Strategic Pace Guidance
 Extend previous envionment to accept pace guidance from strategic layer
 State space is extended (8 -> 9) to include pace guidance
 """
