@@ -19,7 +19,13 @@ class OptimalExecutionEnv(gym.Env):
         self.time_horizon = time_horizon    # 100 minutes episode
         self.n_levels = n_levels
         
-        self.observation_space = spaces.Box(low = -np.inf, high = np.inf, shape = (8,), dtype = np.float32) 
+        self.observation_space = spaces.Box(
+            low = -np.inf, 
+            high = np.inf, 
+            shape = (8,), 
+            dtype = np.float32
+            ) 
+        
         self.action_space = spaces.Discrete(3)  # Example: 3 discrete actions (e.g., nothing, buy, sell)
         
     
