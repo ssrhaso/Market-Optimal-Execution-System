@@ -125,7 +125,7 @@ def train_dqn_agent():
     # CALLBACK
     callback = TrainingCallback()               #  Create custom callback to log training progress
     # TIMESTEPS TO TRAIN
-    total_timesteps = 100000                     # Total training timesteps (can be adjusted)
+    total_timesteps = 100000                     # Total training timesteps 100K (can be adjusted)
     
     model.learn(
         total_timesteps=total_timesteps,        # Total training timesteps

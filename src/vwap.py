@@ -41,4 +41,18 @@ class VWAPstrategy:
             if shares_remaining <= 0:
                 break
         return fill_records
-                
+    
+    
+def execute_vwap(price_series, parent_qty=1000, num_slices=100):
+    """
+    Run VWAP strategy and return average executed price.
+    """
+    from orders import OrderBook
+    orderbook = OrderBook(price_series)
+    vwap_strat = VWAPstrategy(parent_qty, num_slices)
+    vwap_strat.run(orderbook, price_series)
+    exec_prices = []
+    for trade in getattr(orderbook, 'trade_history', []):
+        if getattr(trade, 'order', None) and getattr(trade.order, 'side', None) == 'buy':
+            exec_prices.append(getattr(trade, 'price', None))
+    return np.mean(exec_prices) if len(exec_prices) > 0 else price_series[0]

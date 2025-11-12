@@ -38,3 +38,17 @@ class TWAPstrategy:
             orderbook.set_time(t)
             orderbook.add_order(order = order)
         return fill_records
+    
+def execute_twap(price_series, parent_qty=1000, num_slices=100):
+    """
+    Run TWAP strategy and return average executed price.
+    """
+    from orders import OrderBook
+    orderbook = OrderBook(price_series)
+    twap_strat = TWAPstrategy(parent_qty, num_slices)
+    twap_strat.run(orderbook, price_series)
+    exec_prices = []
+    for trade in getattr(orderbook, 'trade_history', []):
+        if getattr(trade, 'order', None) and getattr(trade.order, 'side', None) == 'buy':
+            exec_prices.append(getattr(trade, 'price', None))
+    return np.mean(exec_prices) if len(exec_prices) > 0 else price_series[0]

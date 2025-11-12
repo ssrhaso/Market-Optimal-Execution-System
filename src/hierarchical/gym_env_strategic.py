@@ -93,7 +93,9 @@ class StrategicEnv(gym.Env):    # LOAD DQN TACTICAL POLICY
         """
         
         # CONVENRT PPO ACTION (0,1,2) TO PACE TARGET (0.02,0.05,0.10)
+        action = int(np.asarray(action).squeeze())
         pace = self.pace_targets[action]
+
 
         # SET PACE GUIDANCE IN TACTICAL ENV (UPDATES 9th DIM OF DQN OBS)
         self.tactical_env.set_pace_guidance(pace)
@@ -162,6 +164,9 @@ class StrategicEnv(gym.Env):    # LOAD DQN TACTICAL POLICY
             volatility = self.tactical_env.current_volatility
         else:
             volatility = 0.015 # DEFAULT VALUE IF NOT AVAILABLE
+        if np.isnan(volatility):
+            volatility = 0.010
+        
         
         # 2. BID-ASK SPREAD (NORMALISED)
         best_bid, best_ask = self.tactical_env.order_book.get_top_of_book()
@@ -175,12 +180,13 @@ class StrategicEnv(gym.Env):    # LOAD DQN TACTICAL POLICY
             current_price = self.tactical_env.price_series[valid_step]
         else:
             current_price = 100.0 # DEFAULT PRICE IF NOT AVAILABLE
-        
         # SPREAD
         if best_bid is None or best_ask is None or current_price == 0:
             spread = 0.0
         else:
             spread = (best_ask - best_bid) / current_price  # Normalised spread
+        if np.isnan(spread):
+            spread = 0.0
         
         
         
@@ -189,12 +195,18 @@ class StrategicEnv(gym.Env):    # LOAD DQN TACTICAL POLICY
         
         # 3. TIME PROGRESS (0 TO 1)
         time_progress = self.tactical_env.current_step / self.tactical_env.time_horizon
+        if np.isnan(time_progress):
+            time_progress = 0.0
         
         # 4. INVENTORY % REMAINING (0 TO 1)
         inventory_pct = self.tactical_env.inventory / self.tactical_env.parent_order_size 
+        if np.isnan(inventory_pct):
+            inventory_pct = 1.0
         
         # 5. CUMULATIVE REWARD
         cumulative_reward = self.cumulative_reward
+        if np.isnan(cumulative_reward):
+            cumulative_reward = 0.0
         
         # STATE ARRAY (5 DIM FOR GYM)
         state = np.array([
@@ -204,45 +216,14 @@ class StrategicEnv(gym.Env):    # LOAD DQN TACTICAL POLICY
             inventory_pct,
             cumulative_reward
         ], dtype=np.float32)
+        if np.any(np.isnan(state)):
+            print("NaN in strategic state: " , state)
+            state = np.nan_to_num(state, nan= 0.0)
+            
         return state
     
     
     
     
     
-# TESTING CODE
-if __name__ == "__main__":
-    """Test strategic environment without PPO"""
-    print("=" * 60)
-    print("TESTING STRATEGIC EXECUTION ENVIRONMENT (PPO)")
-    print("=" * 60)
-    
-    # Create environment (no trained DQN yet, use random tactical)
-    env = StrategicEnv(tactical_policy=None, tactical_steps=10)
-    print("\n✓ Environment created")
-    print(f"  Observation space: {env.observation_space.shape}")
-    print(f"  Action space: {env.action_space}")
-    
-    # Test reset
-    obs, info = env.reset(seed=42)
-    print(f"\n✓ Environment reset")
-    print(f"  Initial observation shape: {obs.shape}")
-    print(f"  Initial observation: {obs}")
-    
-    # Test a few strategic steps
-    print(f"\n✓ Running 3 strategic steps...")
-    for i in range(3):
-        # Take random strategic action
-        action = env.action_space.sample()
-        obs, reward, done, _, info = env.step(action)
-        
-        print(f"  Step {i+1}: action={action}, reward={reward:.2f}, "
-              f"done={done}, steps_taken={info['tactical_steps_taken']}")
-        
-        if done:
-            print(f"  Episode ended at step {i+1}")
-            break
-    
-    print("\n" + "=" * 60)
-    print("✓ All tests passed! Environment ready for PPO training.")
-    print("=" * 60)
+ 
