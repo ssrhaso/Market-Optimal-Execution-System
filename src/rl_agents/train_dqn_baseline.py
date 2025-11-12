@@ -1,21 +1,31 @@
 """Train a Deep Q-Network (DQN) agent for the Optimal Execution environment
 
 1. Create execution environment
-2. Intialise DQN agent with NN architecture
+2. Initialise DQN agent with NN architecture
 3. Train agent over multiple timesteps (episodes)
 4. Saves trained model
 5. Evaluate agent performance
 """
 
-
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import numpy as np
+import random
+import torch
 import matplotlib.pyplot as plt
-from stable_baselines3 import DQN                                   # Library for pre-built RL algorithms 
-from stable_baselines3.common.callbacks import BaseCallback         # Custom callback for training monitoring
-from execution_env import OptimalExecutionEnv
+from stable_baselines3 import DQN
+from stable_baselines3.common.callbacks import BaseCallback
+from gym_env_baseline import OptimalExecutionEnv
+
+# SET ALL SEEDS FOR REPRODUCIBILITY
+np.random.seed(42)
+random.seed(42)
+torch.manual_seed(42)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(42)
+
+
 
 class TrainingCallback(BaseCallback):
     """Custom callback to log training progress & metrics using Stable Baselines3 custom callback system"""
@@ -72,6 +82,7 @@ def train_dqn_agent():
         parent_order_size=1000,     # Total shares to execute
         time_horizon=100,           # Total time steps in the episode
         n_levels=10)                # Number of price levels in the order book
+    env.reset(seed=42)              # Reset environment with seed for reproducibility
     
     print("✓ Environment created")
     print(f"  - Action space: {env.action_space}")              # Features of action space

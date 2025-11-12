@@ -1,4 +1,6 @@
 """
+GYM EVN FOR DQN AGENT
+
 GYM2 - Tactical Execution Enviroment with Strategic Pace Guidance
 Extend previous envionment to accept pace guidance from strategic layer
 State space is extended (8 -> 9) to include pace guidance
@@ -9,7 +11,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-from execution_env import OptimalExecutionEnv
+from gym_env_baseline import OptimalExecutionEnv
 
 
 class TacticalEnvGuided(OptimalExecutionEnv):

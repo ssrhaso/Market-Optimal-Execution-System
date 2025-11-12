@@ -13,7 +13,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__),'..', 'src'))
 
 import numpy as np
-from execution_env import OptimalExecutionEnv
+from gym_env_baseline import OptimalExecutionEnv
 
 
 def test_environment_initialization():
