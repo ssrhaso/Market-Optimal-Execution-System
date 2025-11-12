@@ -294,7 +294,7 @@ def main():
     print(f"   - Baseline DQN: -1.28 (worse than VWAP)")
     print(f"   - Guided DQN: +0.44 (modest improvement)")
     
-    print(f"\n3. Hierarchical RL (Your Contribution):")
+    print(f"\n3. Hierarchical RL (PPO + DQN):")
     print(f"   - PPO + DQN: {your_mean:.2f}% (std: {your_std:.2f}%)")
     
     # Final assessment
