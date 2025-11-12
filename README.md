@@ -1,7 +1,3 @@
-Here's a concise, professional README for your **simulation-focused** repo:
-
-***
-
 # Hierarchical RL Execution (Simulation)
 
 **Hierarchical reinforcement learning framework for optimal intraday trade execution using simulated market environments.**
