@@ -1,4 +1,4 @@
-# Hierarchical RL Execution (Simulation)
+# DQN, PPO RL Execution (Simulation)
 
 **Hierarchical reinforcement learning framework for optimal intraday trade execution using simulated market environments.**
 
@@ -9,7 +9,8 @@
 - **Baselines:** VWAP, TWAP, single-agent RL (for controlled benchmarking)
 
 All training and evaluation conducted on **synthetic price data** to enable reproducible research and robust algorithm analysis.
-Use this repo for developing and benchmarking methodologies before validating on real market data.
+This repo was used for for developing and benchmarking methodologies in order to validate on real market data in a seperate project repo.
+
 
 ## Repository Structure
 
@@ -29,7 +30,6 @@ Use this repo for developing and benchmarking methodologies before validating on
 ## Note
 
 For **real market data validation and out-of-sample backtesting**, refer to the companion repository
-
 ---
 
 Author: @ssrhaso
